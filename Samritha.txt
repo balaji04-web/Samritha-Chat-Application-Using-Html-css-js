@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Chat App</title>
+<style>
+  body {margin:0; padding:0; font-family:'Segoe UI',sans-serif; background:#e5ddd5; display:flex; justify-content:center; align-items:center; height:100vh;}
+  #loginPage {display:flex; flex-direction:column; align-items:center; gap:12px; background:#f0f2f5; padding:40px; border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.2);}
+  #loginPage input {padding:12px; border-radius:8px; border:1px solid #ccc; width:250px;}
+  #loginPage button {padding:10px 20px; border:none; border-radius:8px; background:#25d366; color:white; font-weight:bold; cursor:pointer; transition:0.2s;}
+  #loginPage button:hover { background:#20b358; }
+  #chatContainer {display:none; width:960px; height:600px; background:#f8f9fa; box-shadow:0 8px 20px rgba(0,0,0,0.15); border-radius:12px; overflow:hidden; display:grid; grid-template-columns:260px 1fr;}
+  .sidebar {background:#075e54; padding:20px; display:flex; flex-direction:column; justify-content:space-between; color:#fff;}
+  .sidebar h2 { margin:0; font-size:22px; }
+  .sidebar-footer { display:flex; flex-direction:column; gap:10px; }
+  .sidebar-footer button,input[type="file"] { padding:8px 12px; border:none; border-radius:6px; background:#25d366; color:white; cursor:pointer; transition:0.2s; }
+  .sidebar-footer button:hover { background:#20b358; }
+  .chat-panel { display:flex; flex-direction:column; }
+  .chat-header { display:flex; justify-content:space-between; align-items:center; padding:15px; border-bottom:1px solid #ccc; background:#f5f5f5; }
+  .chat-header .chat-title { font-weight:bold; font-size:18px; }
+  .chat-header button { padding:6px 12px; border:none; border-radius:6px; background:#25d366; color:white; cursor:pointer; margin-left:5px; transition:0.2s; }
+  .chat-header button:hover { background:#20b358; }
+  .chat-area { flex:1; padding:15px; background:#e5ddd5; overflow-y:auto; display:flex; flex-direction:column; gap:12px; scroll-behavior:smooth; }
+  .message-container { display:flex; align-items:flex-end; gap:10px; }
+  .message-container.me { justify-content:flex-end; }
+  .message-container.other { justify-content:flex-start; }
+  .message { max-width:65%; padding:12px 16px; border-radius:20px; word-wrap:break-word; box-shadow:0 1px 3px rgba(0,0,0,0.12); position:relative; transition:0.2s; }
+  .message:hover { box-shadow:0 3px 8px rgba(0,0,0,0.18); }
+  .message.me { background:#dcf8c6; color:#000; text-align:right; }
+  .message.other { background:#fff; color:#000; text-align:left; }
+  .message .meta { font-size:10px; color:#555; margin-top:4px; display:flex; gap:8px; justify-content:flex-end; align-items:center; }
+  .message .actions { position:absolute; bottom:4px; right:6px; display:flex; gap:6px; opacity:0; transition:0.2s; }
+  .message:hover .actions { opacity:1; }
+  .message .actions button { background:transparent; border:none; color:#555; font-size:11px; cursor:pointer; }
+  .avatar { width:36px; height:36px; border-radius:50%; background:#075e54; display:flex; align-items:center; justify-content:center; font-weight:bold; color:#fff; flex-shrink:0; }
+  .composer { display:flex; gap:10px; padding:12px; background:#f5f5f5; align-items:center; }
+  .composer textarea { flex:1; padding:12px; border-radius:20px; border:1px solid #ccc; resize:none; height:50px; }
+  .composer button { padding:10px 16px; border:none; border-radius:20px; background:#25d366; color:white; font-weight:bold; cursor:pointer; transition:0.2s; }
+  .composer button:hover { background:#20b358; }
+  .composer label { cursor:pointer; font-size:24px; transition:0.2s; }
+  .composer label:hover { color:#20b358; }
+  a.file-link { text-decoration:none; color:#555; display:flex; align-items:center; gap:5px; }
+  a.file-link:hover { text-decoration:underline; color:#0b8043; }
+  .badge { font-size:10px; color:#888; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+
+<div id="loginPage">
+  <h1>Login</h1>
+  <input id="loginUser" placeholder="Username">
+  <input id="loginPass" type="password" placeholder="Password">
+  <button id="doLogin">Login</button>
+  <!-- <small>Users: user1/pass1 & user2/pass2</small> -->
+</div>
+
+<div id="chatContainer" class="hidden">
+  <div class="sidebar">
+    <h2>Balaji Chat_Application</h2>
+    <div class="sidebar-footer">
+      <input type="file" id="wpFile" accept="image/*" style="display:none;">
+      <button id="changeWpBtn">Upload Wallpaper</button>
+      <button id="resetWpBtn">Reset Wallpaper</button>
+    </div>
+  </div>
+  <div class="chat-panel">
+    <div class="chat-header">
+      <div class="chat-title">Logged in as: <span id="topName">Not logged in</span></div>
+      <div>
+        <button id="clearChatBtn">Clear Chat</button>
+        <button id="logoutBtn">Logout</button>
+      </div>
+    </div>
+    <div class="chat-area" id="chatArea">
+      <div id="messages"></div>
+    </div>
+    <div class="composer">
+      <textarea id="msgInput" placeholder="Type a message..."></textarea>
+      <input type="file" id="fileInput" style="display:none;">
+      <label for="fileInput" title="Attach file">📎</label>
+      <button id="sendBtn">Send</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/** SET THIS to your Apps Script deployment URL **/
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxPkBf4k1Or4zdpmx5uWmUqU5UTsIM4ZRW_GopR943Idv_JSuI3GZOBdsuPN_OukyFr/exec";
+
+/** Simple demo users **/
+const users = { Balaji:"balaji", Samritha:"samritha" };
+
+let currentUser = null;
+let messages = [];
+let editingIndex = null;
+
+/* ---------- Wallpaper ---------- */
+function applyWallpaper(){
+  const wp = localStorage.getItem('wp_'+currentUser);
+  const chatArea = document.getElementById('chatArea');
+  if (wp) {
+    chatArea.style.backgroundImage = `url(${wp})`;
+    chatArea.style.backgroundSize = 'cover';
+  } else {
+    chatArea.style.backgroundImage = '';
+  }
+}
+document.getElementById('changeWpBtn').onclick = () => document.getElementById('wpFile').click();
+document.getElementById('wpFile').onchange = function(){
+  const file = this.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => { localStorage.setItem('wp_'+currentUser, e.target.result); applyWallpaper(); };
+  reader.readAsDataURL(file);
+};
+document.getElementById('resetWpBtn').onclick = () => { localStorage.removeItem('wp_'+currentUser); applyWallpaper(); };
+
+/* ---------- Auth ---------- */
+document.getElementById('doLogin').onclick = async function(){
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value.trim();
+  if (users[u] && users[u] === p) {
+    currentUser = u;
+    localStorage.setItem('currentUser', currentUser);
+    document.getElementById('loginPage').classList.add('hidden');
+    document.getElementById('chatContainer').classList.remove('hidden');
+    document.getElementById('topName').innerText = currentUser;
+    document.getElementById('clearChatBtn').style.display = (currentUser === 'Balaji') ? 'inline-block' : 'none';
+    applyWallpaper();
+    await loadMessages();
+    startAutoRefresh();
+  } else {
+    alert('Invalid username or password');
+  }
+};
+
+document.getElementById('logoutBtn').onclick = function(){
+  localStorage.removeItem('currentUser');
+  currentUser = null;
+  stopAutoRefresh();
+  document.getElementById('chatContainer').classList.add('hidden');
+  document.getElementById('loginPage').classList.remove('hidden');
+};
+
+/* ---------- Chat: Load & Render ---------- */
+async function loadMessages(){
+  try {
+    const res = await fetch(WEB_APP_URL + "?action=getMessages");
+    const data = await res.json();
+    messages = Array.isArray(data) ? data : [];
+    renderMessages();
+  } catch (e) {
+    console.error("Error loading messages:", e);
+  }
+}
+
+function renderMessages(){
+  const wrap = document.getElementById('messages');
+  wrap.innerHTML = '';
+  messages.forEach((m, index) => {
+    const container = document.createElement('div');
+    container.className = 'message-container ' + (m.sender === currentUser ? 'me' : 'other');
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.textContent = (m.sender || '?').charAt(0).toUpperCase();
+
+    const bubble = document.createElement('div');
+    bubble.className = 'message ' + (m.sender === currentUser ? 'me' : 'other');
+
+    let html = `<strong>${escapeHtml(m.sender || '')}</strong>: ${linkify(escapeHtml(m.text || ''))}`;
+    if (m.file) {
+      if ((m.fileType || '').startsWith('image/')) {
+        html += `<br><img src="${m.file}" alt="${escapeHtml(m.fileName || '')}" style="max-width:220px;border-radius:10px;">`;
+      } else {
+        html += `<br><a class="file-link" href="${m.file}" download="${escapeHtml(m.fileName || 'file')}">📎 ${escapeHtml(m.fileName || 'Download')}</a>`;
+      }
+    }
+
+    /* html += `<div class="meta">
+               <span class="badge">${escapeHtml(m.time || '')}</span>
+               ${m.edited ? '<span class="badge">• edited</span>' : ''}
+             </div>`; */
+
+    bubble.innerHTML = html;
+
+    if (m.sender === currentUser) {
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+      const eb = document.createElement('button');
+      eb.textContent = 'Edit';
+      eb.onclick = () => beginEdit(index);
+      const db = document.createElement('button');
+      db.textContent = 'Delete';
+      db.onclick = () => deleteMessage(index);
+      actions.appendChild(eb);
+      actions.appendChild(db);
+      bubble.appendChild(actions);
+    }
+
+    if (m.sender === currentUser){ container.appendChild(bubble); container.appendChild(avatar); }
+    else { container.appendChild(avatar); container.appendChild(bubble); }
+
+    wrap.appendChild(container);
+  });
+
+  // autoscroll
+  const area = document.getElementById('chatArea');
+  area.scrollTop = area.scrollHeight;
+}
+
+/* ---------- Chat: Send / Edit / Delete / Clear ---------- */
+document.getElementById('sendBtn').onclick = sendMessage;
+document.getElementById('msgInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+async function sendMessage(){
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  const fileInput = document.getElementById('fileInput');
+  const file = fileInput.files[0];
+
+  // If we're in edit mode
+  if (editingIndex !== null) {
+    if (!text) { alert('Message cannot be empty'); return; }
+    try {
+      await fetch(WEB_APP_URL, {
+        method:'POST',
+        body: JSON.stringify({ action:'editMessage', index:editingIndex, newText:text })
+      });
+      editingIndex = null;
+      input.value = '';
+      await loadMessages();
+    } catch (err) {
+      console.error('Edit error:', err);
+    }
+    return;
+  }
+
+  // Sending new message
+  if (!text && !file) return;
+
+  const msgObj = { sender: currentUser, text: text };
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = async function(e){
+      msgObj.file = e.target.result;
+      msgObj.fileType = file.type || '';
+      msgObj.fileName = file.name || 'file';
+      await postMessage(msgObj);
+    };
+    reader.readAsDataURL(file);
+  } else {
+    await postMessage(msgObj);
+  }
+}
+
+async function postMessage(msgObj){
+  try {
+    await fetch(WEB_APP_URL, {
+      method:'POST',
+      body: JSON.stringify({ action:'addMessage', message:msgObj })
+    });
+    document.getElementById('msgInput').value = '';
+    document.getElementById('fileInput').value = '';
+    await loadMessages();
+  } catch(err) {
+    alert("Error: Could not send message. Check Web App URL.");
+    console.error(err);
+  }
+}
+
+function beginEdit(index){
+  const msg = messages[index];
+  if (!msg || msg.sender !== currentUser) return;
+  editingIndex = index;
+  const input = document.getElementById('msgInput');
+  input.value = msg.text || '';
+  input.focus();
+}
+
+async function deleteMessage(index){
+  if (!confirm('Delete this message?')) return;
+  try {
+    await fetch(WEB_APP_URL, {
+      method:'POST',
+      body: JSON.stringify({ action:'deleteMessage', index })
+    });
+    await loadMessages();
+  } catch(err) {
+    alert("Error: Could not delete message.");
+    console.error(err);
+  }
+}
+
+document.getElementById('clearChatBtn').onclick = async function(){
+  if (currentUser !== 'Balaji') return alert('Only Balaji can clear chat!');
+  if (!confirm('Are you sure you want to clear all chat messages?')) return;
+  try {
+    await fetch(WEB_APP_URL, {
+      method:'POST',
+      body: JSON.stringify({ action:'clearMessages', user: currentUser })
+    });
+    await loadMessages();
+  } catch(e){
+    alert("Error: Could not clear chat.");
+    console.error(e);
+  }
+};
+
+/* ---------- Auto Refresh ---------- */
+let refreshTimer = null;
+function startAutoRefresh(){
+  stopAutoRefresh();
+  refreshTimer = setInterval(loadMessages, 2000);
+}
+function stopAutoRefresh(){
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+}
+
+/* ---------- Utilities ---------- */
+function escapeHtml(s){
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+}
+function linkify(text){
+  const urlRegex = /\bhttps?:\/\/[^\s]+/gi;
+  return text.replace(urlRegex, m => `<a href="${m}" target="_blank" rel="noopener">${m}</a>`);
+}
+
+/* ---------- Auto-login if saved ---------- */
+window.onload = async function(){
+  const saved = localStorage.getItem('currentUser');
+  if (saved && users[saved]) {
+    currentUser = saved;
+    document.getElementById('loginPage').classList.add('hidden');
+    document.getElementById('chatContainer').classList.remove('hidden');
+    document.getElementById('topName').innerText = currentUser;
+    document.getElementById('clearChatBtn').style.display = (currentUser === 'Balaji') ? 'inline-block' : 'none';
+    applyWallpaper();
+    await loadMessages();
+    startAutoRefresh();
+  }
+};
+</script>
+</body>
+</html>

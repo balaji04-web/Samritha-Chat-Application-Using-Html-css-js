@@ -1,0 +1,117 @@
+var SHEET_NAME = "Samritha"; // Sheet tab name
+
+function doGet(e) { 
+  return handleRequest(e); 
+}
+function doPost(e) { 
+  return handleRequest(e); 
+}
+
+function handleRequest(e) {
+  e = e || {};
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_NAME);
+
+  // Create sheet and headers if it doesn't exist
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAME);
+    sheet.appendRow(["sender","text","time","edited","file","fileType","fileName"]);
+  }
+
+  var action = null;
+  var postData = null;
+
+  if (e.parameter && e.parameter.action) {
+    action = e.parameter.action;
+  } else if (e.postData && e.postData.contents) {
+    try {
+      postData = JSON.parse(e.postData.contents);
+      action = postData.action;
+    } catch(err) {
+      return sendJson({error:"Invalid JSON in POST"});
+    }
+  }
+  if (!action) return sendJson({error:"No action specified"});
+
+  var response;
+
+  if (action === "getMessages") {
+    // Return all messages
+    var data = sheet.getDataRange().getValues();
+    var out = [];
+    for (var i = 1; i < data.length; i++) {
+      out.push({
+        sender:  String(data[i][0] || ""),
+        text:    String(data[i][1] || ""),
+        time:    String(data[i][2] || ""),
+        edited:  String(data[i][3] || "") === "true",
+        file:    String(data[i][4] || ""),
+        fileType:String(data[i][5] || ""),
+        fileName:String(data[i][6] || "")
+      });
+    }
+    response = out;
+
+  } else if (action === "addMessage" && postData && postData.message) {
+    // Add a new message; time is always HH:mm:ss
+    var msg = postData.message;
+    var now = new Date();
+    var timeFormatted = Utilities.formatDate(now, Session.getScriptTimeZone(), "HH:mm:ss");
+
+    sheet.appendRow([
+      msg.sender || "",
+      msg.text || "",
+      timeFormatted,
+      "false",
+      msg.file || "",
+      msg.fileType || "",
+      msg.fileName || ""
+    ]);
+    response = {status:"success"};
+
+  } else if (action === "editMessage" && postData && postData.index !== undefined && postData.newText !== undefined) {
+    // Edit message text and mark edited=true
+    var idx = Number(postData.index);
+    var row = idx + 2; // +1 for 0-index, +1 for header row
+    if (row >= 2 && row <= sheet.getLastRow()) {
+      sheet.getRange(row, 2).setValue(String(postData.newText)); // text (col B)
+      sheet.getRange(row, 4).setValue("true");                   // edited (col D)
+      response = {status:"success", edited:true};
+    } else {
+      response = {status:"error", message:"Invalid index"};
+    }
+
+  } else if (action === "deleteMessage" && postData && postData.index !== undefined) {
+    // Delete a specific message by index
+    var dIdx = Number(postData.index);
+    var dRow = dIdx + 2;
+    if (dRow >= 2 && dRow <= sheet.getLastRow()) {
+      sheet.deleteRow(dRow);
+      response = {status:"success"};
+    } else {
+      response = {status:"error", message:"Invalid index"};
+    }
+
+  } else if (action === "clearMessages" && postData && postData.user) {
+    // Only Balaji can clear
+    if (postData.user === "Balaji") {
+      sheet.clearContents();
+      sheet.appendRow(["sender","text","time","edited","file","fileType","fileName"]);
+      response = {status:"success", message:"All chat cleared"};
+    } else {
+      response = {status:"denied", message:"Only Balaji can clear chat"};
+    }
+
+  } else {
+    response = {error:"Invalid action or missing data"};
+  }
+
+  return sendJson(response);
+}
+
+function sendJson(obj){
+  var out = ContentService.createTextOutput();
+  out.setMimeType(ContentService.MimeType.JSON);
+  out.setContent(JSON.stringify(obj));
+  return out;
+}
